@@ -67,11 +67,11 @@ The reason for four peaks is that the two peaks on the right are for negative fr
 
 ## FFT vs SFT
 
-Speedways compared to the slow Fourier transform there is no comparison as the following figure shows.
+Speed wise compared to the slow Fourier transform there is no comparison as the following figure shows.
 
 ![](sft_fft_diff.png)
 
-On my computer doing a quick test, the slow Fourier transform with 16,384 sample points took about 1000 times longer to perform than the FFT. So yup FFT is the only way to go.
+On my computer doing a quick test, the slow Fourier transform with 16,384 sample points took about 1000 times longer to perform than the FFT. FFT is the only way to go.
 
 Jonti
 
