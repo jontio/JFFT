@@ -66,8 +66,30 @@ bool JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
     //this would be a good idea for memory limited devices
 
     //bit reversal. fast (lets say 2x as fast as the slow one)
-    //this i dont understand but is some sort of swapping and I know
-    //that can be used for bit reversal.
+    //this does the bit reversal in an iterative way.
+    // This is a bit hard to draw in ascii art
+    //   1 2 3 4
+    //    X   X
+    //   2 1 4 3
+    //    \ X /
+    //     X X
+    //    / X \
+    //   4 3 2 1
+    //
+    // or maybe this is a better to describe the process
+    //
+    //  1 2   3 4   5 6   7 8
+    //   X     X     X     X
+    //  2 1   4 3   6 5   8 7
+    //
+    //  21 43   65 87
+    //    X       X
+    //  43 21   87 65
+    //
+    //  4321 8765
+    //      X
+    //  8765 4321
+    //
     for (quint32 i=0;i<((quint32)nfft);++i)
     {
 
