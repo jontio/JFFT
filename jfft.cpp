@@ -65,6 +65,7 @@ bool JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
     //it would mean taking the conjugate of x before the forward fft is done then taking the conjugate after the fft is done
     //this would be a good idea for memory limited devices
 
+
     //bit reversal. fast (lets say 2x as fast as the slow one)
     //this does the bit reversal in an iterative way.
     // This is a bit hard to draw in ascii art
@@ -261,3 +262,242 @@ bool JFFT::sft(cpx_type *x,int size,fft_direction_t fft_direction)
 
     return true;
 }
+
+//------------Fast Fir
+
+JFastFir::JFastFir()
+{
+
+}
+
+void JFastFir::SetKernel(const std::vector<JFFT::cpx_type> &_kernel)
+{
+    //copy kernel over
+    kernel=_kernel;
+
+    //use a bigger FFT size at least 4 x the size of the kernel and make it a power of 2
+    kernel_non_zero_size = kernel.size();
+    nfft = 1;
+    int nfft_rule = 4*kernel_non_zero_size;//rule of thumb
+    while(nfft < nfft_rule)
+    {
+        nfft<<=1;
+    }
+
+    //pad kernel with zeros till it's nfft in size
+    kernel.resize(nfft,0);
+
+    //create a space for the signal to be put
+    sigspace.resize(nfft,0);
+    sigspace_ptr=0;
+
+    //calulate the signal length per fft
+    signal_non_zero_size=nfft+1-kernel_non_zero_size;
+
+    //create a remainder buffer for overlap
+    remainder_size=nfft-signal_non_zero_size;
+    remainder.resize(remainder_size,0);
+
+    //show the sizes
+    qDebug()<<"kernel_non_zero_size"<<kernel_non_zero_size<<"signal_non_zero_size"<<signal_non_zero_size<<"remainder_size"<<remainder_size<<"nfft"<<nfft;
+
+    //make sure the remainder is not bigger than the signal size.
+    assert(remainder_size<=signal_non_zero_size);
+
+    //put the kernel into the freq domain
+    fft.fft(kernel);
+
+}
+
+
+//slightly faster but by very little
+JFFT::cpx_type JFastFir::update(JFFT::cpx_type in_val)
+{
+    //if we are back at zero then time for an fft
+    if(sigspace_ptr>=signal_non_zero_size)
+    {
+
+        if(signal_non_zero_size<=0)return in_val;//check if the fastfir has been initalized. if it hasn't just return what ever we get sent
+
+        //convolution
+        psigspace=sigspace.data();
+        pkernel=kernel.data();
+        fft.fft(sigspace);
+        for(int k=0;k<nfft;++k)
+        {
+            *psigspace*=*pkernel;
+            pkernel++;
+            psigspace++;
+        }
+        fft.ifft(sigspace);
+
+        //deal with overlap
+        psigspace=sigspace.data();//pointer to sigspace
+        premainder=remainder.data();//pointer to remainder
+        psigspace_overlap=psigspace+signal_non_zero_size;//pointer to start of the overlap in sigspace
+        for(int k=0;k<remainder_size;++k)
+        {
+
+            *psigspace+=*premainder;//add last overlap to this sigspace
+            *premainder=*psigspace_overlap;//save the remainder from this convolution to remainder
+            *psigspace_overlap=0;//the sigspace needs to be padded with zeros once again
+
+            //increse the pointers
+            psigspace++;
+            premainder++;
+            psigspace_overlap++;
+        }
+
+        //start from the beginning
+        sigspace_ptr=0;
+
+    }
+
+    psigspace=sigspace.data()+sigspace_ptr;
+    JFFT::cpx_type out_val=*psigspace;//pop the old val
+    *psigspace=in_val;//push in new val
+
+    sigspace_ptr++;
+
+    return out_val;
+}
+
+JFFT::cpx_type JFastFir::update_easy_to_understand(JFFT::cpx_type in_val)
+{
+    //if we are back at zero then time for an fft
+    if(sigspace_ptr>=signal_non_zero_size)
+    {
+
+        if(signal_non_zero_size<=0)return in_val;//check if the fastfir has been initalized. if it hasn't just return what ever we get sent
+
+        //convolution.
+        fft.fft(sigspace);
+        for(int k=0;k<nfft;++k)sigspace[k]*=kernel[k];
+        fft.ifft(sigspace);
+
+        //this needs remainder_size<=signal_non_zero_size.
+        //
+        //these 3 can be combined and pointers used.
+        //
+        //these are used to deal with the the fact that our block of signal
+        //data has increased from N to N+M-1 (N is signal size and M is kernel size).
+        //we have set it up so N+M-1==nfft and the last M-1 are saved for next time
+        //in the remainder buffer. The M-1 samples from the previous time are added to
+        //the start of this time. Finally we padd the next signal with zeros to avoid
+        //time aliasing. it sonds confusing but it's really not as bad as it sounds.
+
+        //add remainder from last time to the start of this one
+        for(int k=0;k<remainder_size;++k)sigspace[k]+=remainder[k];
+
+        //save the remainder of this time for the next one
+        for(int k=0;k<remainder_size;++k)remainder[k]=sigspace[k+signal_non_zero_size];
+
+        //clear the end of this for the next fft
+        for(int k=0;k<remainder_size;++k)sigspace[k+signal_non_zero_size]=0;
+
+        //start from the beginning
+        sigspace_ptr=0;
+
+    }
+
+    JFFT::cpx_type out_val=sigspace[sigspace_ptr];//pop the old val
+    sigspace[sigspace_ptr]=in_val;//push in new val
+
+    sigspace_ptr++;
+
+    return out_val;
+}
+
+//----------- Filter design
+
+//---filter design
+
+double JFilterDesign::sinc_normalized(double val)
+{
+    if (val==0)return 1.0;
+    return (sin(M_PI*val)/(M_PI*val));
+}
+
+vector<JFFT::cpx_type> JFilterDesign::LowPassHanning(double FrequencyCutOff, double SampleRate, int Length)
+{
+    vector<JFFT::cpx_type> h;
+    if(Length<1)return h;
+    if(!(Length%2))Length++;
+    int j=1;
+    for(int i=(-(Length-1)/2);i<=((Length-1)/2);i++)
+    {
+        double w=0.5*(1.0-cos(2.0*M_PI*((double)j)/((double)(Length))));
+        h.push_back(w*(2.0*FrequencyCutOff/SampleRate)*sinc_normalized(2.0*FrequencyCutOff*((double)i)/SampleRate));
+        j++;
+    }
+
+    return h;
+
+/* in matlab this function is
+idx = (-(Length-1)/2:(Length-1)/2);
+hideal = (2*FrequencyCutOff/SampleRate)*sinc(2*FrequencyCutOff*idx/SampleRate);
+h = hanning(Length)' .* hideal;
+*/
+
+}
+
+vector<JFFT::cpx_type> JFilterDesign::HighPassHanning(double FrequencyCutOff, double SampleRate, int Length)
+{
+    vector<JFFT::cpx_type> h;
+    if(Length<1)return h;
+    if(!(Length%2))Length++;
+
+    vector<JFFT::cpx_type> h1;
+    vector<JFFT::cpx_type> h2;
+    h2.assign(Length,0);
+    h2[(Length-1)/2]=1.0;
+
+    h1=LowPassHanning(FrequencyCutOff,SampleRate,Length);
+    if((h1.size()==(size_t)Length)&&(h2.size()==(size_t)Length))
+    {
+        for(int i=0;i<Length;i++)h.push_back(h2[i]-h1[i]);
+    }
+
+    return h;
+}
+
+vector<JFFT::cpx_type> JFilterDesign::BandPassHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length)
+{
+    vector<JFFT::cpx_type> h;
+    if(Length<1)return h;
+    if(!(Length%2))Length++;
+
+    vector<JFFT::cpx_type> h1;
+    vector<JFFT::cpx_type> h2;
+
+    h2=LowPassHanning(HighFrequencyCutOff,SampleRate,Length);
+    h1=LowPassHanning(LowFrequencyCutOff,SampleRate,Length);
+
+    if((h1.size()==(size_t)Length)&&(h2.size()==(size_t)Length))
+    {
+        for(int i=0;i<Length;i++)h.push_back(h2[i]-h1[i]);
+    }
+
+    return h;
+}
+
+vector<JFFT::cpx_type> JFilterDesign::BandStopHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length)
+{
+    vector<JFFT::cpx_type> h;
+    if(Length<1)return h;
+    if(!(Length%2))Length++;
+
+    vector<JFFT::cpx_type> h1;
+    vector<JFFT::cpx_type> h2;
+    h2.assign(Length,0);
+    h2[(Length-1)/2]=1.0;
+
+    h1=BandPassHanning(LowFrequencyCutOff,HighFrequencyCutOff,SampleRate,Length);
+    if((h1.size()==(size_t)Length)&&(h2.size()==(size_t)Length))
+    {
+        for(int i=0;i<Length;i++)h.push_back(h2[i]-h1[i]);
+    }
+
+    return h;
+}
+
