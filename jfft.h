@@ -80,5 +80,70 @@ private:
 
 };
 
+//----------------
+
+
+//an example of 1D FastFir (1D Fast convolution)
+class JFastFir
+{
+public:
+    JFastFir();
+    void SetKernel(const std::vector<JFFT::cpx_type> &kernel);
+    JFFT::cpx_type update(JFFT::cpx_type in_val);//process one sample at a time
+    JFFT::cpx_type update_easy_to_understand(JFFT::cpx_type in_val);//process one sample at a time. easy to understand
+
+    //convenience functions
+    void SetKernel(const std::vector<double> &_kernel)//for a real kernel
+    {
+        std::vector<JFFT::cpx_type> tmp_kernel;
+        tmp_kernel.resize(_kernel.size());
+        for(int i=0;i<((int)_kernel.size());++i)tmp_kernel[i]=_kernel[i];
+        SetKernel(tmp_kernel);
+    }
+    double update(double in_val)//process one sample at a time for a real signal
+    {
+        JFFT::cpx_type tmp_in_val=in_val;
+        return update(tmp_in_val).real();
+    }
+
+private:
+    JFFT fft;
+    std::vector<JFFT::cpx_type> kernel;
+    std::vector<JFFT::cpx_type> sigspace;//in out buffer
+    std::vector<JFFT::cpx_type> remainder;//used for overlap
+
+    JFFT::cpx_type *pkernel;
+    JFFT::cpx_type *psigspace;
+    JFFT::cpx_type *premainder;
+    JFFT::cpx_type *psigspace_overlap;
+
+    int kernel_non_zero_size=0;
+    int remainder_size=0;
+
+    //this is for in and out buffer
+    int signal_non_zero_size=0;
+    int sigspace_ptr=0;
+
+    int nfft=0;//fft size
+
+};
+
+//------------------------
+
+
+//filter design
+//all designs are using the window method and derived from the low pass filter
+
+class JFilterDesign
+{
+public:
+    JFilterDesign(){}
+    static std::vector<JFFT::cpx_type> LowPassHanning(double FrequencyCutOff, double SampleRate, int Length);
+    static std::vector<JFFT::cpx_type> HighPassHanning(double FrequencyCutOff, double SampleRate, int Length);
+    static std::vector<JFFT::cpx_type> BandPassHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length);
+    static std::vector<JFFT::cpx_type> BandStopHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length);
+private:
+    static double sinc_normalized(double val);
+};
 
 #endif // JFFT_H
