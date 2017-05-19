@@ -270,10 +270,11 @@ JFastFir::JFastFir()
 
 }
 
-void JFastFir::SetKernel(const std::vector<JFFT::cpx_type> &_kernel)
+void JFastFir::SetKernel(const JFFT::cpx_type *_kernel,int size)
 {
     //copy kernel over
-    kernel=_kernel;
+    kernel.resize(size);
+    memcpy(kernel.data(),_kernel,sizeof(JFFT::cpx_type)*size);
 
     //use a bigger FFT size at least 4 x the size of the kernel and make it a power of 2
     kernel_non_zero_size = kernel.size();
@@ -309,6 +310,73 @@ void JFastFir::SetKernel(const std::vector<JFFT::cpx_type> &_kernel)
 
 }
 
+//this is a block processing one and no faster than single processing though
+void JFastFir::update_block(JFFT::cpx_type *buffer,int size)
+{
+
+    //make a tmp space
+    tmp_space.resize(nfft);
+
+    //process data until we have processed the required amount of samples
+    int samples_processed=0;
+    while(samples_processed<size)
+    {
+
+        //if we are back at zero then time for an fft
+        if(sigspace_ptr>=signal_non_zero_size)
+        {
+
+            if(signal_non_zero_size<=0)return;//check if the fastfir has been initalized. if it hasn't just return what ever we get sent
+
+            //convolution
+            psigspace=sigspace.data();
+            pkernel=kernel.data();
+            fft.fft(sigspace);
+            for(int k=0;k<nfft;++k)
+            {
+                *psigspace*=*pkernel;
+                pkernel++;
+                psigspace++;
+            }
+            fft.ifft(sigspace);
+
+            //deal with overlap
+            psigspace=sigspace.data();//pointer to sigspace
+            premainder=remainder.data();//pointer to remainder
+            psigspace_overlap=psigspace+signal_non_zero_size;//pointer to start of the overlap in sigspace
+            for(int k=0;k<remainder_size;++k)
+            {
+
+                *psigspace+=*premainder;//add last overlap to this sigspace
+                *premainder=*psigspace_overlap;//save the remainder from this convolution to remainder
+                *psigspace_overlap=0;//the sigspace needs to be padded with zeros once again
+
+                //increse the pointers
+                psigspace++;
+                premainder++;
+                psigspace_overlap++;
+            }
+
+            //start from the beginning
+            sigspace_ptr=0;
+
+        }
+
+        //calculate the maximum amount of samples we can copy over, that is either the number of samples
+        //we still have to process (size-samples_processed) or the number of samples till we fill
+        //sigspace (signal_non_zero_size-sigspace_ptr).
+        int number_to_copy_over=std::min(signal_non_zero_size-sigspace_ptr,size-samples_processed);
+        //qDebug()<<number_to_copy_over;
+        memcpy(tmp_space.data(),&buffer[samples_processed],sizeof(JFFT::cpx_type)*number_to_copy_over);//take the unprocessed samples from the buffer and put them in tmp space
+        memcpy(&buffer[samples_processed],&sigspace[sigspace_ptr],sizeof(JFFT::cpx_type)*number_to_copy_over);//take the processed samples and put them into the buffer
+        memcpy(&sigspace[sigspace_ptr],tmp_space.data(),sizeof(JFFT::cpx_type)*number_to_copy_over);//take the samples from the tmp space and put them into the space for processing
+        sigspace_ptr+=number_to_copy_over;
+        samples_processed+=number_to_copy_over;
+
+    }
+
+
+}
 
 //slightly faster but by very little
 JFFT::cpx_type JFastFir::update(JFFT::cpx_type in_val)
