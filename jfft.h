@@ -88,11 +88,31 @@ class JFastFir
 {
 public:
     JFastFir();
-    void SetKernel(const std::vector<JFFT::cpx_type> &kernel);
+    void SetKernel(const JFFT::cpx_type *kernel,int size);
+    void update_block(JFFT::cpx_type *buffer,int size);//process a block at a time this does not seem to be any faster than the convenience function
     JFFT::cpx_type update(JFFT::cpx_type in_val);//process one sample at a time
     JFFT::cpx_type update_easy_to_understand(JFFT::cpx_type in_val);//process one sample at a time. easy to understand
 
     //convenience functions
+    void update(JFFT::cpx_type *buffer,int size)//process a block at a time version 1
+    {
+        for(int i=0;i<size;++i)
+        {
+            buffer[i]=update(buffer[i]);
+        }
+    }
+    void update(std::vector<JFFT::cpx_type> &buffer)//process a block at a time
+    {
+        update(buffer.data(),buffer.size());
+    }
+    void update(QVector<JFFT::cpx_type> &buffer)//process a block at a time
+    {
+        update(buffer.data(),buffer.size());
+    }
+    void SetKernel(const std::vector<JFFT::cpx_type> &_kernel)//for a complex kernel as a vector
+    {
+        SetKernel(_kernel.data(),_kernel.size());
+    }
     void SetKernel(const std::vector<double> &_kernel)//for a real kernel
     {
         std::vector<JFFT::cpx_type> tmp_kernel;
@@ -125,6 +145,10 @@ private:
     int sigspace_ptr=0;
 
     int nfft=0;//fft size
+
+    //for block prosessing using version 2
+    std::vector<JFFT::cpx_type> tmp_space;
+
 
 };
 
