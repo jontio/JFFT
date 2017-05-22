@@ -7,23 +7,49 @@
 #include <assert.h>
 #include <QVector>
 
-//Radix 2. Complex 1 dimentional in place FFT/IFFT
+//Radix 2. Floating complex 1 dimentional in place FFT/IFFT
 //included is also a SFT (Slow Fourier Transform) on my desktop a 16384 point transform took 1.2ms for my FFT and
 //3.4s for my SFT. Thats about 3000 times faster
+//We also have real 1 dimentional non in place FFT/IFFT that are about twice as fast as the complex ones
 class JFFT
 {
 public:
     typedef std::complex<double> cpx_type;//this is the complex number definition. people really should use complex numbers more they are much better than real numbers
     typedef enum fft_direction_t{FORWARD,INVERSE}fft_direction_t;
     JFFT();
-    bool init(int &fft_size);
-    bool fft(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//this is the main fft/ifft function and is the fastest
-    bool fft_easy_to_understand(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//this is the same but is slower and eisier to undrstand
-    bool sft(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);
+    void init(int &fft_size);
+    void fft_real(double *real,cpx_type *complex,int size,fft_direction_t fft_direction=FORWARD);//real ffts. NB the underlying complex FFT needs to be half of the size of size
+    void fft(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//this is the main fft/ifft function and is the fastest
+    void fft_easy_to_understand(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//this is the same but is slower and eisier to undrstand
+    void sft(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//a slow dft just for comparison
     int get_nfft(){return nfft;}
 
     //convenience functions and others if you want to add them. these are a few of the ones I use
-    bool fft(std::vector<cpx_type> &x)
+
+    //convenience functions std::vector form
+    void fft_real(std::vector<double> &real,std::vector<cpx_type> &complex)
+    {
+        int tnfft=real.size()>>1;
+        if(tnfft!=nfft)
+        {
+            init(tnfft);
+            real.resize(2*tnfft,0);
+            complex.resize(2*tnfft,0);
+        }
+        fft_real(real.data(),complex.data(),real.size());
+    }
+    void ifft_real(std::vector<cpx_type> &complex,std::vector<double> &real)
+    {
+        int tnfft=complex.size()>>1;
+        if(tnfft!=nfft)
+        {
+            init(tnfft);
+            real.resize(2*tnfft,0);
+            complex.resize(2*tnfft,0);
+        }
+        fft_real(real.data(),complex.data(),real.size(),INVERSE);
+    }
+    void fft(std::vector<cpx_type> &x)
     {
         if(((int)x.size())!=nfft)
         {
@@ -31,9 +57,9 @@ public:
             init(tnfft);
             x.resize(tnfft,0);
         }
-        return fft(x.data(),x.size());
+        fft(x.data(),x.size());
     }
-    bool ifft(std::vector<cpx_type> &x)
+    void ifft(std::vector<cpx_type> &x)
     {
         if(((int)x.size())!=nfft)
         {
@@ -41,9 +67,33 @@ public:
             init(tnfft);
             x.resize(tnfft,0);
         }
-        return fft(x.data(),x.size(),INVERSE);
+        fft(x.data(),x.size(),INVERSE);
     }
-    bool fft(QVector<cpx_type> &x)
+
+    //convenience functions QVector form
+    void fft_real(QVector<double> &real,QVector<cpx_type> &complex)
+    {
+        int tnfft=real.size()>>1;
+        if(tnfft!=nfft)
+        {
+            init(tnfft);
+            real.resize(2*tnfft);
+            complex.resize(2*tnfft);
+        }
+        fft_real(real.data(),complex.data(),real.size());
+    }
+    void ifft_real(QVector<cpx_type> &complex,QVector<double> &real)
+    {
+        int tnfft=complex.size()>>1;
+        if(tnfft!=nfft)
+        {
+            init(tnfft);
+            real.resize(2*tnfft);
+            complex.resize(2*tnfft);
+        }
+        fft_real(real.data(),complex.data(),real.size(),INVERSE);
+    }
+    void fft(QVector<cpx_type> &x)
     {
         if(x.size()!=nfft)
         {
@@ -51,9 +101,9 @@ public:
             init(tnfft);
             x.resize(tnfft);
         }
-        return fft(x.data(),x.size());
+        fft(x.data(),x.size());
     }
-    bool ifft(QVector<cpx_type> &x)
+    void ifft(QVector<cpx_type> &x)
     {
         if(x.size()!=nfft)
         {
@@ -61,7 +111,7 @@ public:
             init(tnfft);
             x.resize(tnfft);
         }
-        return fft(x.data(),x.size(),INVERSE);
+        fft(x.data(),x.size(),INVERSE);
     }
 
 private:
@@ -71,9 +121,11 @@ private:
     int nfft=0;
 
     //memory
+    std::vector<cpx_type> DIDDLE_A;
+    std::vector<cpx_type> DIDDLE_B;
     std::vector<cpx_type> TWIDDLE_mem;
     std::vector<cpx_type> TWIDDLE_INV_mem;
-    std::vector<cpx_type> F;//used if the slow DFT is done
+    std::vector<cpx_type> F;//used if the slow DFT is done or real FFT/iFFT
 
     void inline swap(cpx_type &a,cpx_type &b){cpx_type c_tmp=b;b=a;a=c_tmp;}
 
@@ -84,12 +136,13 @@ private:
 
 
 //an example of 1D FastFir (1D Fast convolution)
+//I have not yet taken advantage of the real ffts above. this is comeing.
 class JFastFir
 {
 public:
     JFastFir();
     void SetKernel(const JFFT::cpx_type *kernel,int size);
-    void update_block(JFFT::cpx_type *buffer,int size);//process a block at a time this does not seem to be any faster than the convenience function
+    void update_block(JFFT::cpx_type *buffer,int size);//process a block at a time this may not be any faster than the convenience function
     JFFT::cpx_type update(JFFT::cpx_type in_val);//process one sample at a time
     JFFT::cpx_type update_easy_to_understand(JFFT::cpx_type in_val);//process one sample at a time. easy to understand
 
