@@ -8,7 +8,7 @@ JFFT::JFFT()
 
 }
 
-bool JFFT::init(int &fft_size)
+void JFFT::init(int &fft_size)
 {
 
     //use a bigger FFT size if its not a power of 2
@@ -49,12 +49,68 @@ bool JFFT::init(int &fft_size)
         }
     }
 
-    return true;
-
+    //load diddle factors
+    //these are the factors for real transforms
+    DIDDLE_A.resize(nfft);
+    DIDDLE_B.resize(nfft);
+    for(int i=0;i<nfft;i++)
+    {
+        DIDDLE_A[i]=0.5*(1.0-imag*exp(-2.0*imag*M_PI*((double)i)/((double)(2*nfft))));
+        DIDDLE_B[i]=0.5*(1.0+imag*exp(-2.0*imag*M_PI*((double)i)/((double)(2*nfft))));
+    }
 
 }
 
-bool JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
+//the size of the sets should be 2 times the size of the fft
+void JFFT::fft_real(double *real,cpx_type *complex,int size,fft_direction_t fft_direction)
+{
+    int NpN=nfft<<1;
+    assert(size==NpN);
+    F.resize(nfft);
+    if(fft_direction==FORWARD)
+    {
+
+        //split the real data into real and imaginary
+        for(int i=0;i<nfft;++i)
+        {
+            F[i]=cpx_type(real[2*i],real[2*i+1]);
+        }
+
+        //perform the complex fft
+        fft(F.data(),nfft);
+
+        //do the diddling
+        complex[0]=F[0]*DIDDLE_A[0]+DIDDLE_B[0]*std::conj(F[0]);
+        complex[nfft]=F[0]*DIDDLE_B[0]+DIDDLE_A[0]*std::conj(F[0]);
+        for(int i=1;i<nfft;++i)
+        {
+            complex[i]=F[i]*DIDDLE_A[i]+DIDDLE_B[i]*std::conj(F[(nfft-i)]);
+            complex[NpN-i]=std::conj(complex[i]);
+        }
+
+    }
+     else
+     {
+        //do the diddling
+        for(int i=0;i<nfft;++i)
+        {
+            F[i]=complex[i]*std::conj(DIDDLE_A[i])+std::conj(DIDDLE_B[i])*std::conj(complex[(nfft-i)]);
+        }
+
+        //perform the complex inverse fft
+        fft(F.data(),nfft,INVERSE);
+
+        //join the real and imaginary data into real
+        for(int i=0;i<nfft;++i)
+        {
+            real[2*i]=F[i].real();
+            real[2*i+1]=F[i].imag();
+        }
+
+     }
+}
+
+void JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
 {
     assert(size==nfft);
     cpx_type *TWIDDLE;
@@ -151,11 +207,10 @@ bool JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
         for(int i=0;i<nfft;++i)x[i]*=(1.0/((double)nfft));
     }
 
-    return true;
 }
 
 //this is eaiser to understand
-bool JFFT::fft_easy_to_understand(cpx_type *x,int size,fft_direction_t fft_direction)
+void JFFT::fft_easy_to_understand(cpx_type *x,int size,fft_direction_t fft_direction)
 {
     assert(size==nfft);
     cpx_type *TWIDDLE;
@@ -220,13 +275,12 @@ bool JFFT::fft_easy_to_understand(cpx_type *x,int size,fft_direction_t fft_direc
         for(int i=0;i<nfft;++i)x[i]*=(1.0/((double)nfft));
     }
 
-    return true;
 }
 
 //DFT from definition
 //if you were really wanting the best from it you should move Wf to the init function
 //but as this is just a rough comparison between a fft and a slow ft implimentation this should do
-bool JFFT::sft(cpx_type *x,int size,fft_direction_t fft_direction)
+void JFFT::sft(cpx_type *x,int size,fft_direction_t fft_direction)
 {
     cpx_type imag=cpx_type(0,1);
     cpx_type W;
@@ -260,7 +314,6 @@ bool JFFT::sft(cpx_type *x,int size,fft_direction_t fft_direction)
         for(int i=0;i<size;++i)x[i]=F[i];
      }
 
-    return true;
 }
 
 //------------Fast Fir
