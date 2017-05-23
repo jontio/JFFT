@@ -57,6 +57,8 @@ I have put in a slow Fourier transform (called `sft`) using the definition of th
 
 Only two files and needed to use JFFT `jfft.cpp` and `jfft.h`
 
+I've also put in real FFT/IFFT that's about twice as fast as complex FFT/IFFT. Also there are real and complex Fast FIR filters with LPF,HPF and BPF designers. Speed wise this code is looking like it's a bit slower than KissFFT but that's to be expected as speed is not my intention but rather something that is easier to understand, use and modify if needed.
+
 ## FFT example code
 
 Included in this repository is an example program written in QT C++. It performs a Fourier transform of two sine waves and outputs some text that can be cut and pasted into MATLAB or Octave to view the results. Doing this I generated the following figure.
@@ -72,6 +74,8 @@ Speed wise compared to the slow Fourier transform there is no comparison as the 
 ![](sft_fft_diff.png)
 
 On my computer doing a quick test, the slow Fourier transform with 16,384 sample points took about 3000 times longer to perform than the FFT. FFT is the only way to go.
+
+Having a look at the JFastFIR I see on the GitHub repository I recorded 20ms using a 48000 real sample signal with a 10001 point kernel with KissFFT, using JFFT I get about 25ms currently on the same computer.
 
 Jonti
 
