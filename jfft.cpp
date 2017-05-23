@@ -352,8 +352,12 @@ void JFastFir::SetKernel(const JFFT::cpx_type *_kernel,int size)
     remainder_size=nfft-signal_non_zero_size;
     remainder.resize(remainder_size,0);
 
+    //create real spaces
+    sigspace_real.resize(nfft,0);
+    remainder_real.resize(remainder_size,0);
+
     //show the sizes
-    qDebug()<<"kernel_non_zero_size"<<kernel_non_zero_size<<"signal_non_zero_size"<<signal_non_zero_size<<"remainder_size"<<remainder_size<<"nfft"<<nfft;
+    //qDebug()<<"kernel_non_zero_size"<<kernel_non_zero_size<<"signal_non_zero_size"<<signal_non_zero_size<<"remainder_size"<<remainder_size<<"nfft"<<nfft;
 
     //make sure the remainder is not bigger than the signal size.
     assert(remainder_size<=signal_non_zero_size);
@@ -527,6 +531,49 @@ JFFT::cpx_type JFastFir::update_easy_to_understand(JFFT::cpx_type in_val)
     sigspace_ptr++;
 
     return out_val;
+}
+
+//this could be a bit faster but it's easier to understand this way and the loss of speed is not much
+double JFastFir::update(double real_in)
+{
+    //if we are back at zero then time for an fft
+    if(sigspace_ptr>=signal_non_zero_size)
+    {
+
+        if(signal_non_zero_size<=0)return real_in;//check if the fastfir has been initalized. if it hasn't just return what ever we get sent
+
+        //convolution.
+        fft.fft_real(sigspace_real,sigspace);
+        for(int k=0;k<(nfft/2+1);++k)sigspace[k]*=kernel[k];//as it's real only slightly over half of freq is needed
+        fft.ifft_real(sigspace,sigspace_real);
+
+        //this needs remainder_size<=signal_non_zero_size.
+        //
+        //
+        //these are used to deal with the the fact that our block of signal
+        //data has increased from N to N+M-1 (N is signal size and M is kernel size).
+        //we have set it up so N+M-1==nfft and the last M-1 are saved for next time
+        //in the remainder buffer. The M-1 samples from the previous time are added to
+        //the start of this time. Finally we padd the next signal with zeros to avoid
+        //time aliasing. it sonds confusing but it's really not as bad as it sounds.
+        for(int k=0;k<remainder_size;++k)
+        {
+            sigspace_real[k]+=remainder_real[k];//add remainder from last time to the start of this one
+            remainder_real[k]=sigspace_real[k+signal_non_zero_size];//save the remainder of this time for the next one
+            sigspace_real[k+signal_non_zero_size]=0;//clear the end of this for the next fft
+        }
+
+        //start from the beginning
+        sigspace_ptr=0;
+
+    }
+
+    double out_real=sigspace_real[sigspace_ptr];//pop the old val
+    sigspace_real[sigspace_ptr]=real_in;//push in new val
+
+    sigspace_ptr++;
+
+    return out_real;
 }
 
 //----------- Filter design
