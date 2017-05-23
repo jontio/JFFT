@@ -145,6 +145,7 @@ public:
     void update_block(JFFT::cpx_type *buffer,int size);//process a block at a time this may not be any faster than the convenience function
     JFFT::cpx_type update(JFFT::cpx_type in_val);//process one sample at a time
     JFFT::cpx_type update_easy_to_understand(JFFT::cpx_type in_val);//process one sample at a time. easy to understand
+    double update(double real_in);//process one real sample fast one at a time
 
     //convenience functions
     void update(JFFT::cpx_type *buffer,int size)//process a block at a time version 1
@@ -173,7 +174,7 @@ public:
         for(int i=0;i<((int)_kernel.size());++i)tmp_kernel[i]=_kernel[i];
         SetKernel(tmp_kernel);
     }
-    double update(double in_val)//process one sample at a time for a real signal
+    double update_real_slow(double in_val)//process one sample at a time for a real signal
     {
         JFFT::cpx_type tmp_in_val=in_val;
         return update(tmp_in_val).real();
@@ -198,6 +199,10 @@ private:
     int sigspace_ptr=0;
 
     int nfft=0;//fft size
+
+    //space if using real filtering
+    std::vector<double> sigspace_real;//in out real buffer
+    std::vector<double> remainder_real;//used for real overlap
 
     //for block prosessing using version 2
     std::vector<JFFT::cpx_type> tmp_space;
