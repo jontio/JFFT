@@ -1,5 +1,7 @@
 #include "jfft.h"
 
+#include <cstdint>
+
 
 using namespace std;
 
@@ -147,10 +149,10 @@ void JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
     //      X
     //  8765 4321
     //
-    for (quint32 i=0;i<((quint32)nfft);++i)
+    for (uint32_t i=0;i<((uint32_t)nfft);++i)
     {
 
-        quint32 y=i;
+        uint32_t y=i;
         y = (((y & 0xaaaaaaaa) >> 1) | ((y & 0x55555555) << 1));
         y = (((y & 0xcccccccc) >> 2) | ((y & 0x33333333) << 2));
         y = (((y & 0xf0f0f0f0) >> 4) | ((y & 0x0f0f0f0f) << 4));

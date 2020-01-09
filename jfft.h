@@ -1,11 +1,14 @@
 #ifndef JFFT_H
 #define JFFT_H
 
-#include <QDebug>
 #include <complex>
 #include <cmath>
 #include <assert.h>
+
+#ifdef QT_CORE_LIB
+#include <QDebug>
 #include <QVector>
+#endif
 
 //Radix 2. Floating complex 1 dimentional in place FFT/IFFT
 //included is also a SFT (Slow Fourier Transform) on my desktop a 16384 point transform took 1.2ms for my FFT and
@@ -70,6 +73,7 @@ public:
         fft(x.data(),x.size(),INVERSE);
     }
 
+#ifdef QT_CORE_LIB    
     //convenience functions QVector form
     void fft_real(QVector<double> &real,QVector<cpx_type> &complex)
     {
@@ -113,6 +117,7 @@ public:
         }
         fft(x.data(),x.size(),INVERSE);
     }
+#endif
 
 private:
 
@@ -159,10 +164,12 @@ public:
     {
         update(buffer.data(),buffer.size());
     }
+#ifdef QT_CORE_LIB
     void update(QVector<JFFT::cpx_type> &buffer)//process a block at a time
     {
         update(buffer.data(),buffer.size());
     }
+#endif
     void SetKernel(const std::vector<JFFT::cpx_type> &_kernel)//for a complex kernel as a vector
     {
         SetKernel(_kernel.data(),_kernel.size());
