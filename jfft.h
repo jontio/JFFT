@@ -4,6 +4,7 @@
 #include <complex>
 #include <cmath>
 #include <assert.h>
+#include <vector>
 
 #ifdef QT_CORE_LIB
 #include <QDebug>
