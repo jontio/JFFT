@@ -22,7 +22,11 @@ public:
     typedef enum fft_direction_t{FORWARD,INVERSE}fft_direction_t;
     JFFT();
     void init(int &fft_size);
-    void fft_real(double *real,cpx_type *complex,int size,fft_direction_t fft_direction=FORWARD);//real ffts. NB the underlying complex FFT needs to be half of the size of size
+
+    //real ffts. NB the underlying complex FFT needs to be half of the size of size
+    void fft_real(const double *real,cpx_type *complex,int size);
+    void ifft_real(const cpx_type *complex,double *real,int size);
+
     void fft(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//this is the main fft/ifft function and is the fastest
     void fft_easy_to_understand(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//this is the same but is slower and eisier to undrstand
     void sft(cpx_type *x,int size,fft_direction_t fft_direction=FORWARD);//a slow dft just for comparison
@@ -40,6 +44,7 @@ public:
             real.resize(2*tnfft,0);
             complex.resize(2*tnfft,0);
         }
+        if(complex.size()!=real.size())complex.resize(real.size());
         fft_real(real.data(),complex.data(),real.size());
     }
     void ifft_real(std::vector<cpx_type> &complex,std::vector<double> &real)
@@ -51,7 +56,8 @@ public:
             real.resize(2*tnfft,0);
             complex.resize(2*tnfft,0);
         }
-        fft_real(real.data(),complex.data(),real.size(),INVERSE);
+        if(complex.size()!=real.size())real.resize(complex.size());
+        ifft_real(complex.data(),real.data(),real.size());
     }
     void fft(std::vector<cpx_type> &x)
     {
@@ -85,6 +91,7 @@ public:
             real.resize(2*tnfft);
             complex.resize(2*tnfft);
         }
+        if(complex.size()!=real.size())complex.resize(real.size());
         fft_real(real.data(),complex.data(),real.size());
     }
     void ifft_real(QVector<cpx_type> &complex,QVector<double> &real)
@@ -96,7 +103,24 @@ public:
             real.resize(2*tnfft);
             complex.resize(2*tnfft);
         }
-        fft_real(real.data(),complex.data(),real.size(),INVERSE);
+        if(complex.size()!=real.size())real.resize(complex.size());
+        ifft_real(complex.data(),real.data(),real.size());
+    }
+    void fft_real(const QVector<double> &real,QVector<cpx_type> &complex)
+    {
+        int tnfft=real.size()>>1;
+        if(tnfft!=nfft)init(tnfft);
+        assert(tnfft==nfft);
+        if(complex.size()!=real.size())complex.resize(real.size());
+        fft_real(real.data(),complex.data(),real.size());
+    }
+    void ifft_real(const QVector<cpx_type> &complex,QVector<double> &real)
+    {
+        int tnfft=complex.size()>>1;
+        if(tnfft!=nfft)init(tnfft);
+        assert(tnfft==nfft);
+        if(complex.size()!=real.size())real.resize(complex.size());
+        ifft_real(complex.data(),real.data(),real.size());
     }
     void fft(QVector<cpx_type> &x)
     {
@@ -142,12 +166,12 @@ private:
 
 
 //an example of 1D FastFir (1D Fast convolution)
-//I have not yet taken advantage of the real ffts above. this is comeing.
+//I have not yet taken advantage of the real ffts above.
 class JFastFir
 {
 public:
     JFastFir();
-    void SetKernel(const JFFT::cpx_type *kernel,int size);
+    void SetKernel(const JFFT::cpx_type *kernel,int size,int approx_fft_size=-1);
     void update_block(JFFT::cpx_type *buffer,int size);//process a block at a time this may not be any faster than the convenience function
     JFFT::cpx_type update(JFFT::cpx_type in_val);//process one sample at a time
     JFFT::cpx_type update_easy_to_understand(JFFT::cpx_type in_val);//process one sample at a time. easy to understand
@@ -170,17 +194,28 @@ public:
     {
         update(buffer.data(),buffer.size());
     }
-#endif
-    void SetKernel(const std::vector<JFFT::cpx_type> &_kernel)//for a complex kernel as a vector
+    void SetKernel(const QVector<JFFT::cpx_type> &_kernel,int approx_fft_size=-1)//for a complex kernel as a vector
     {
-        SetKernel(_kernel.data(),_kernel.size());
+        SetKernel(_kernel.data(),_kernel.size(),approx_fft_size);
     }
-    void SetKernel(const std::vector<double> &_kernel)//for a real kernel
+    void SetKernel(const QVector<double> &_kernel,int approx_fft_size=-1)//for a real kernel
+    {
+        QVector<JFFT::cpx_type> tmp_kernel;
+        tmp_kernel.resize(_kernel.size());
+        for(int i=0;i<((int)_kernel.size());++i)tmp_kernel[i]=_kernel[i];
+        SetKernel(tmp_kernel,approx_fft_size);
+    }
+#endif
+    void SetKernel(const std::vector<JFFT::cpx_type> &_kernel,int approx_fft_size=-1)//for a complex kernel as a vector
+    {
+        SetKernel(_kernel.data(),_kernel.size(),approx_fft_size);
+    }
+    void SetKernel(const std::vector<double> &_kernel,int approx_fft_size=-1)//for a real kernel
     {
         std::vector<JFFT::cpx_type> tmp_kernel;
         tmp_kernel.resize(_kernel.size());
         for(int i=0;i<((int)_kernel.size());++i)tmp_kernel[i]=_kernel[i];
-        SetKernel(tmp_kernel);
+        SetKernel(tmp_kernel,approx_fft_size);
     }
     double update_real_slow(double in_val)//process one sample at a time for a real signal
     {

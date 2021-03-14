@@ -2,8 +2,11 @@
 
 #include <cstdint>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
-using namespace std;
+//using namespace std;
 
 JFFT::JFFT()
 {
@@ -41,8 +44,8 @@ void JFFT::init(int &fft_size)
     {
         for(int i=0;i<N/2;i++)
         {
-            cpx_type twiddle=exp(-2.0*imag*M_PI*((double)i)/((double)N));
-            cpx_type twiddle_inv=exp(2.0*imag*M_PI*((double)i)/((double)N));
+            cpx_type twiddle=std::exp(-2.0*imag*M_PI*((double)i)/((double)N));
+            cpx_type twiddle_inv=std::exp(2.0*imag*M_PI*((double)i)/((double)N));
             assert(w<nfft);
             TWIDDLE[w]=twiddle;
             TWIDDLE_INV[w]=twiddle_inv;
@@ -57,59 +60,60 @@ void JFFT::init(int &fft_size)
     DIDDLE_B.resize(nfft);
     for(int i=0;i<nfft;i++)
     {
-        DIDDLE_A[i]=0.5*(1.0-imag*exp(-2.0*imag*M_PI*((double)i)/((double)(2*nfft))));
-        DIDDLE_B[i]=0.5*(1.0+imag*exp(-2.0*imag*M_PI*((double)i)/((double)(2*nfft))));
+        DIDDLE_A[i]=0.5*(1.0-imag*std::exp(-2.0*imag*M_PI*((double)i)/((double)(2*nfft))));
+        DIDDLE_B[i]=0.5*(1.0+imag*std::exp(-2.0*imag*M_PI*((double)i)/((double)(2*nfft))));
     }
 
 }
 
 //the size of the sets should be 2 times the size of the fft
-void JFFT::fft_real(double *real,cpx_type *complex,int size,fft_direction_t fft_direction)
+void JFFT::fft_real(const double *real,cpx_type *complex,int size)
 {
     int NpN=nfft<<1;
     assert(size==NpN);
     F.resize(nfft);
-    if(fft_direction==FORWARD)
+
+    //split the real data into real and imaginary
+    for(int i=0;i<nfft;++i)
     {
-
-        //split the real data into real and imaginary
-        for(int i=0;i<nfft;++i)
-        {
-            F[i]=cpx_type(real[2*i],real[2*i+1]);
-        }
-
-        //perform the complex fft
-        fft(F.data(),nfft);
-
-        //do the diddling
-        complex[0]=F[0]*DIDDLE_A[0]+DIDDLE_B[0]*std::conj(F[0]);
-        complex[nfft]=F[0]*DIDDLE_B[0]+DIDDLE_A[0]*std::conj(F[0]);
-        for(int i=1;i<nfft;++i)
-        {
-            complex[i]=F[i]*DIDDLE_A[i]+DIDDLE_B[i]*std::conj(F[(nfft-i)]);
-            complex[NpN-i]=std::conj(complex[i]);
-        }
-
+        F[i]=cpx_type(real[2*i],real[2*i+1]);
     }
-     else
-     {
-        //do the diddling
-        for(int i=0;i<nfft;++i)
-        {
-            F[i]=complex[i]*std::conj(DIDDLE_A[i])+std::conj(DIDDLE_B[i])*std::conj(complex[(nfft-i)]);
-        }
 
-        //perform the complex inverse fft
-        fft(F.data(),nfft,INVERSE);
+    //perform the complex fft
+    fft(F.data(),nfft);
 
-        //join the real and imaginary data into real
-        for(int i=0;i<nfft;++i)
-        {
-            real[2*i]=F[i].real();
-            real[2*i+1]=F[i].imag();
-        }
+    //do the diddling
+    complex[0]=F[0]*DIDDLE_A[0]+DIDDLE_B[0]*std::conj(F[0]);
+    complex[nfft]=F[0]*DIDDLE_B[0]+DIDDLE_A[0]*std::conj(F[0]);
+    for(int i=1;i<nfft;++i)
+    {
+        complex[i]=F[i]*DIDDLE_A[i]+DIDDLE_B[i]*std::conj(F[(nfft-i)]);
+        complex[NpN-i]=std::conj(complex[i]);
+    }
+}
 
-     }
+//the size of the sets should be 2 times the size of the fft
+void JFFT::ifft_real(const cpx_type *complex,double *real,int size)
+{
+    int NpN=nfft<<1;
+    assert(size==NpN);
+    F.resize(nfft);
+
+    //do the diddling
+    for(int i=0;i<nfft;++i)
+    {
+        F[i]=complex[i]*std::conj(DIDDLE_A[i])+std::conj(DIDDLE_B[i])*std::conj(complex[(nfft-i)]);
+    }
+
+    //perform the complex inverse fft
+    fft(F.data(),nfft,INVERSE);
+
+    //join the real and imaginary data into real
+    for(int i=0;i<nfft;++i)
+    {
+        real[2*i]=F[i].real();
+        real[2*i+1]=F[i].imag();
+    }
 }
 
 void JFFT::fft(cpx_type *x,int size,fft_direction_t fft_direction)
@@ -287,8 +291,8 @@ void JFFT::sft(cpx_type *x,int size,fft_direction_t fft_direction)
     cpx_type imag=cpx_type(0,1);
     cpx_type W;
     F.assign(size,0);
-    if(fft_direction==FORWARD)W=exp(-2.0*imag*M_PI/((double)size));
-     else W=exp(2.0*imag*M_PI/((double)size));
+    if(fft_direction==FORWARD)W=std::exp(-2.0*imag*M_PI/((double)size));
+     else W=std::exp(2.0*imag*M_PI/((double)size));
 
     //this makes std::pow(W,n*k)==Wf[(n*k)%size] and Wf[(n*k)%size] is faster
     std::vector<cpx_type> Wf;
@@ -325,17 +329,17 @@ JFastFir::JFastFir()
 
 }
 
-void JFastFir::SetKernel(const JFFT::cpx_type *_kernel,int size)
+void JFastFir::SetKernel(const JFFT::cpx_type *_kernel,int kernel_size,int approx_fft_size)
 {
     //copy kernel over
-    kernel.resize(size);
-    memcpy(kernel.data(),_kernel,sizeof(JFFT::cpx_type)*size);
+    kernel.resize(kernel_size);
+    memcpy(kernel.data(),_kernel,sizeof(JFFT::cpx_type)*kernel_size);
 
     //use a bigger FFT size at least 4 x the size of the kernel and make it a power of 2
     kernel_non_zero_size = kernel.size();
     nfft = 1;
-    int nfft_rule = 4*kernel_non_zero_size;//rule of thumb
-    while(nfft < nfft_rule)
+    if(approx_fft_size<=0) approx_fft_size = 4*kernel_non_zero_size;//rule of thumb
+    while(nfft < approx_fft_size)
     {
         nfft<<=1;
     }
@@ -585,18 +589,18 @@ double JFastFir::update(double real_in)
 double JFilterDesign::sinc_normalized(double val)
 {
     if (val==0)return 1.0;
-    return (sin(M_PI*val)/(M_PI*val));
+    return (std::sin(M_PI*val)/(M_PI*val));
 }
 
-vector<JFFT::cpx_type> JFilterDesign::LowPassHanning(double FrequencyCutOff, double SampleRate, int Length)
+std::vector<JFFT::cpx_type> JFilterDesign::LowPassHanning(double FrequencyCutOff, double SampleRate, int Length)
 {
-    vector<JFFT::cpx_type> h;
+    std::vector<JFFT::cpx_type> h;
     if(Length<1)return h;
     if(!(Length%2))Length++;
     int j=1;
     for(int i=(-(Length-1)/2);i<=((Length-1)/2);i++)
     {
-        double w=0.5*(1.0-cos(2.0*M_PI*((double)j)/((double)(Length))));
+        double w=0.5*(1.0-std::cos(2.0*M_PI*((double)j)/((double)(Length))));
         h.push_back(w*(2.0*FrequencyCutOff/SampleRate)*sinc_normalized(2.0*FrequencyCutOff*((double)i)/SampleRate));
         j++;
     }
@@ -611,14 +615,14 @@ h = hanning(Length)' .* hideal;
 
 }
 
-vector<JFFT::cpx_type> JFilterDesign::HighPassHanning(double FrequencyCutOff, double SampleRate, int Length)
+std::vector<JFFT::cpx_type> JFilterDesign::HighPassHanning(double FrequencyCutOff, double SampleRate, int Length)
 {
-    vector<JFFT::cpx_type> h;
+    std::vector<JFFT::cpx_type> h;
     if(Length<1)return h;
     if(!(Length%2))Length++;
 
-    vector<JFFT::cpx_type> h1;
-    vector<JFFT::cpx_type> h2;
+    std::vector<JFFT::cpx_type> h1;
+    std::vector<JFFT::cpx_type> h2;
     h2.assign(Length,0);
     h2[(Length-1)/2]=1.0;
 
@@ -631,14 +635,14 @@ vector<JFFT::cpx_type> JFilterDesign::HighPassHanning(double FrequencyCutOff, do
     return h;
 }
 
-vector<JFFT::cpx_type> JFilterDesign::BandPassHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length)
+std::vector<JFFT::cpx_type> JFilterDesign::BandPassHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length)
 {
-    vector<JFFT::cpx_type> h;
+    std::vector<JFFT::cpx_type> h;
     if(Length<1)return h;
     if(!(Length%2))Length++;
 
-    vector<JFFT::cpx_type> h1;
-    vector<JFFT::cpx_type> h2;
+    std::vector<JFFT::cpx_type> h1;
+    std::vector<JFFT::cpx_type> h2;
 
     h2=LowPassHanning(HighFrequencyCutOff,SampleRate,Length);
     h1=LowPassHanning(LowFrequencyCutOff,SampleRate,Length);
@@ -651,14 +655,14 @@ vector<JFFT::cpx_type> JFilterDesign::BandPassHanning(double LowFrequencyCutOff,
     return h;
 }
 
-vector<JFFT::cpx_type> JFilterDesign::BandStopHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length)
+std::vector<JFFT::cpx_type> JFilterDesign::BandStopHanning(double LowFrequencyCutOff,double HighFrequencyCutOff, double SampleRate, int Length)
 {
-    vector<JFFT::cpx_type> h;
+    std::vector<JFFT::cpx_type> h;
     if(Length<1)return h;
     if(!(Length%2))Length++;
 
-    vector<JFFT::cpx_type> h1;
-    vector<JFFT::cpx_type> h2;
+    std::vector<JFFT::cpx_type> h1;
+    std::vector<JFFT::cpx_type> h2;
     h2.assign(Length,0);
     h2[(Length-1)/2]=1.0;
 

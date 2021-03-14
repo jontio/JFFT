@@ -10,7 +10,6 @@ MainWindow::MainWindow(QWidget *parent) :
 
     //JFFT usage example
 
-
     //load time data in this case two real sine waves
     QVector<JFFT::cpx_type> x;
     x.resize(16384);//use a power of 2 else JFFT will change it to be so
@@ -34,16 +33,12 @@ MainWindow::MainWindow(QWidget *parent) :
         str+=QString::number(x[i].imag());
         str+="i";
         if(i+1<x.size())str+=",";
-         else str+="];\nplot(abs(f));";
-
+        else str+="];\nplot(abs(f));xlim([1 numel(f)]);title('JFFT example usage output');xlabel('Sample');ylabel('magnitude');set(gca, 'YScale', 'log');\n";
     }
     ui->plainTextEdit->setPlainText(str);
 
     //tranform it back to the time domain using an inverse FFT
     fft.ifft(x);
-
-
-
 
 }
 
